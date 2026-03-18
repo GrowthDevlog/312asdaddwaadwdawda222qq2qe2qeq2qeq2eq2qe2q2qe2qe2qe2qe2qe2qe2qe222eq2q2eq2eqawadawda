@@ -107,10 +107,38 @@
     .progress-stats { gap: 12px; }
     .item-meta { display: none; }
   }
+
+  /* PASSWORD SCREEN */
+  #pw-screen { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 9999; }
+  #pw-screen.hidden { display: none; }
+  .pw-box { background: var(--bg2); border: 1px solid var(--border2); border-radius: 16px; padding: 40px 36px; width: 100%; max-width: 360px; display: flex; flex-direction: column; align-items: center; gap: 20px; }
+  .pw-logo { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+  .pw-logo span { color: var(--accent); }
+  .pw-subtitle { font-size: 13px; color: var(--muted); margin-top: -12px; }
+  .pw-input { width: 100%; background: var(--bg3); border: 1.5px solid var(--border2); border-radius: 8px; color: var(--text); font-size: 15px; padding: 10px 14px; outline: none; text-align: center; letter-spacing: 2px; transition: border-color 0.2s; }
+  .pw-input:focus { border-color: var(--accent); }
+  .pw-input.error { border-color: var(--red); animation: shake 0.3s ease; }
+  .pw-btn { width: 100%; background: var(--accent2); border: none; color: #fff; font-size: 14px; font-weight: 600; padding: 10px; border-radius: 8px; cursor: pointer; transition: background 0.15s; }
+  .pw-btn:hover { background: var(--accent); }
+  .pw-error { font-size: 12px; color: var(--red); height: 16px; }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
 </style>
 </head>
 <body>
 
+<!-- PASSWORD SCREEN -->
+<div id="pw-screen">
+  <div class="pw-box">
+    <div class="pw-logo">Deck'n'<span>Bag</span></div>
+    <div class="pw-subtitle">Kampfsystem Implementierung</div>
+    <input class="pw-input" id="pw-input" type="password" placeholder="Passwort" maxlength="40"
+      onkeydown="if(event.key==='Enter') checkPw()" autocomplete="off" />
+    <div class="pw-error" id="pw-error"></div>
+    <button class="pw-btn" onclick="checkPw()">Einloggen</button>
+  </div>
+</div>
+
+<div id="app" style="display:none">
 <div class="header">
   <div>
     <div class="logo">Deck'n'<span>Bag</span></div>
@@ -143,11 +171,55 @@
 </div>
 
 <div class="toast" id="toast"></div>
+</div><!-- /app -->
 
 <script>
-const STORAGE_KEY = 'decknbag_combat_todo_v1';
-const OPEN_KEY = 'decknbag_open_phases_v1';
+// ─── PASSWORD ─────────────────────────────────────────────────────────────────
+const PW_HASH = '483b4450df0aa5d5a1fd3fcb6611b0c2db37a0c6e6c80e98cce97b96cf02a4b4'; // sha256 of "decknbag"
+
+async function sha256(msg) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(msg));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+async function checkPw() {
+  const val = document.getElementById('pw-input').value;
+  const hash = await sha256(val);
+  if (hash === PW_HASH) {
+    sessionStorage.setItem('dnb_auth', '1');
+    document.getElementById('pw-screen').classList.add('hidden');
+    document.getElementById('app').style.display = 'block';
+    initUser();
+    loadData();
+  } else {
+    const inp = document.getElementById('pw-input');
+    const err = document.getElementById('pw-error');
+    inp.classList.add('error');
+    err.textContent = 'Falsches Passwort';
+    inp.value = '';
+    setTimeout(() => { inp.classList.remove('error'); err.textContent = ''; }, 1500);
+  }
+}
+
+// Auto-unlock if already authenticated this session
+if (sessionStorage.getItem('dnb_auth') === '1') {
+  document.getElementById('pw-screen').classList.add('hidden');
+  document.getElementById('app').style.display = 'block';
+}
+
+// Focus input on load
+document.getElementById('pw-input').focus();
+</script>
+
+<script>
 const USER_KEY = 'decknbag_username_v1';
+
+// ─── GITHUB CONFIG ────────────────────────────────────────────────────────────
+const GH_TOKEN = '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';
+const GH_REPO  = 'GrowthDevlog/312asdaddwaadwdawda222qq2qe2qeq2qeq2eq2qe2q2qe2qe2qe2qe2qe2qe2qe222eq2q2eq2eqawadawda';
+const GH_FILE  = 'data.json';
+const GH_API   = `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`;
+let fileSha = null;
 
 // ─── DATA ─────────────────────────────────────────────────────────────────────
 const PHASES = [
@@ -239,32 +311,57 @@ let openPhases = {};
 let currentUser = localStorage.getItem(USER_KEY) || '';
 let syncing = false;
 
-// ─── STORAGE API ──────────────────────────────────────────────────────────────
+// ─── GITHUB API ───────────────────────────────────────────────────────────────
 async function loadData() {
   setSyncState('syncing');
   try {
-    const result = await window.storage.get(STORAGE_KEY, true);
-    if (result && result.value) {
-      todoState = JSON.parse(result.value);
+    const res = await fetch(GH_API, {
+      headers: { 'Authorization': `token ${GH_TOKEN}`, 'Accept': 'application/vnd.github.v3+json' }
+    });
+    if (res.status === 404) {
+      todoState = {};
+      fileSha = null;
+      setSyncState('synced');
+      render();
+      return;
     }
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    fileSha = json.sha;
+    todoState = JSON.parse(atob(json.content.replace(/\n/g, '')));
     setSyncState('synced');
     render();
   } catch(e) {
-    // Key doesn't exist yet — start fresh
-    todoState = {};
-    setSyncState('synced');
-    render();
+    setSyncState('error');
+    showToast('Laden fehlgeschlagen: ' + e.message);
   }
 }
 
 async function saveData() {
   setSyncState('syncing');
   try {
-    await window.storage.set(STORAGE_KEY, JSON.stringify(todoState), true);
+    const content = btoa(unescape(encodeURIComponent(JSON.stringify(todoState, null, 2))));
+    const body = { message: 'update todo state', content };
+    if (fileSha) body.sha = fileSha;
+    const res = await fetch(GH_API, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `token ${GH_TOKEN}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.message || 'HTTP ' + res.status);
+    }
+    const json = await res.json();
+    fileSha = json.content.sha;
     setSyncState('synced');
   } catch(e) {
     setSyncState('error');
-    showToast('Sync fehlgeschlagen — versuche es erneut');
+    showToast('Speichern fehlgeschlagen: ' + e.message);
   }
 }
 
@@ -418,8 +515,7 @@ setInterval(loadData, 30000);
 PHASES.forEach(p => { openPhases[p.id] = false; });
 openPhases[PHASES[0].id] = true;
 
-initUser();
-loadData();
+// initUser and loadData are called after password check above
 </script>
 </body>
 </html>
