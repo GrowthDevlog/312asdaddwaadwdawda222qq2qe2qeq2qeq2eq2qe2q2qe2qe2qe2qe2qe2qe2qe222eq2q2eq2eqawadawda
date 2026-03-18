@@ -175,7 +175,7 @@
 
 <script>
 // ─── PASSWORD ─────────────────────────────────────────────────────────────────
-const PW_HASH = '483b4450df0aa5d5a1fd3fcb6611b0c2db37a0c6e6c80e98cce97b96cf02a4b4'; // sha256 of "decknbag"
+const PW_HASH = '69ff92f766eee151c740a83a1612d06c5f19efe886e0429b0f5f4f377f0804fb'; // sha256 of "decknbag"
 
 async function sha256(msg) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(msg));
@@ -215,11 +215,24 @@ document.getElementById('pw-input').focus();
 const USER_KEY = 'decknbag_username_v1';
 
 // ─── GITHUB CONFIG ────────────────────────────────────────────────────────────
-const GH_TOKEN = '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';
 const GH_REPO  = 'GrowthDevlog/312asdaddwaadwdawda222qq2qe2qeq2qeq2eq2qe2q2qe2qe2qe2qe2qe2qe2qe222eq2q2eq2eqawadawda';
 const GH_FILE  = 'data.json';
 const GH_API   = `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`;
 let fileSha = null;
+
+// Token aus URL (?t=...) oder sessionStorage laden
+function getToken() {
+  const urlToken = new URLSearchParams(window.location.search).get('t');
+  if (urlToken) {
+    sessionStorage.setItem('dnb_token', urlToken);
+    // URL sauber halten — Token aus Adresszeile entfernen
+    const url = new URL(window.location);
+    url.searchParams.delete('t');
+    window.history.replaceState({}, '', url);
+    return urlToken;
+  }
+  return sessionStorage.getItem('dnb_token');
+}
 
 // ─── DATA ─────────────────────────────────────────────────────────────────────
 const PHASES = [
@@ -313,10 +326,11 @@ let syncing = false;
 
 // ─── GITHUB API ───────────────────────────────────────────────────────────────
 async function loadData() {
+  if (!getToken()) { setSyncState('error'); showToast('Kein Token — URL mit ?t=TOKEN aufrufen'); return; }
   setSyncState('syncing');
   try {
     const res = await fetch(GH_API, {
-      headers: { 'Authorization': `token ${GH_TOKEN}`, 'Accept': 'application/vnd.github.v3+json' }
+      headers: { 'Authorization': `token ${getToken()}`, 'Accept': 'application/vnd.github.v3+json' }
     });
     if (res.status === 404) {
       todoState = {};
@@ -346,7 +360,7 @@ async function saveData() {
     const res = await fetch(GH_API, {
       method: 'PUT',
       headers: {
-        'Authorization': `token ${GH_TOKEN}`,
+        'Authorization': `token ${getToken()}`,
         'Accept': 'application/vnd.github.v3+json',
         'Content-Type': 'application/json'
       },
