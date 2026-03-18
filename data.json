@@ -10,8 +10,8 @@
     "time": "18.03. 15:14"
   },
   "s1": {
-    "done": true,
-    "user": "Dennis",
-    "time": "18.03. 21:15"
+    "done": false,
+    "user": "",
+    "time": ""
   }
 }
