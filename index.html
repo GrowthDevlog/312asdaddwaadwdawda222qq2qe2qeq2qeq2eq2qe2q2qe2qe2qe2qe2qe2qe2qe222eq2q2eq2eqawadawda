@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deck'n'Bag — Kampfsystem Todo</title>
+<style>
+  :root {
+    --bg: #0f0f12;
+    --bg2: #16161c;
+    --bg3: #1e1e27;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.14);
+    --text: #e8e6f0;
+    --muted: #7a7890;
+    --subtle: #3a3850;
+    --accent: #7c6af7;
+    --accent2: #5a4fd4;
+    --green: #4ade80;
+    --green-bg: rgba(74,222,128,0.1);
+    --red: #f87171;
+    --amber: #fbbf24;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; min-height: 100vh; }
+
+  /* HEADER */
+  .header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 100; }
+  .logo { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
+  .logo span { color: var(--accent); }
+  .subtitle { font-size: 12px; color: var(--muted); }
+  .sync-indicator { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .sync-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); transition: background 0.3s; }
+  .sync-dot.synced { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .sync-dot.syncing { background: var(--amber); animation: pulse 0.8s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* PROGRESS BAR */
+  .progress-wrap { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
+  .progress-track { flex: 1; height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent2), var(--accent)); border-radius: 3px; transition: width 0.4s ease; }
+  .progress-stats { display: flex; gap: 20px; }
+  .pstat { text-align: center; }
+  .pstat-val { font-size: 18px; font-weight: 700; color: var(--text); }
+  .pstat-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* LAYOUT */
+  .container { max-width: 860px; margin: 0 auto; padding: 24px 20px; }
+
+  /* PHASE */
+  .phase { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 12px; overflow: hidden; }
+  .phase-header { display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer; user-select: none; transition: background 0.15s; }
+  .phase-header:hover { background: var(--bg3); }
+  .phase-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .phase-title { font-size: 14px; font-weight: 600; flex: 1; }
+  .phase-badge { font-size: 11px; padding: 2px 9px; border-radius: 20px; font-weight: 500; }
+  .phase-pct { font-size: 11px; color: var(--muted); min-width: 32px; text-align: right; }
+  .phase-chevron { color: var(--muted); font-size: 10px; transition: transform 0.2s; }
+  .phase-chevron.open { transform: rotate(90deg); }
+  .phase-bar { height: 2px; }
+  .phase-bar-fill { height: 100%; transition: width 0.4s; }
+  .items { display: none; }
+  .items.open { display: block; }
+
+  /* ITEM */
+  .item { display: flex; align-items: flex-start; gap: 12px; padding: 11px 16px; border-top: 1px solid var(--border); cursor: pointer; transition: background 0.1s; }
+  .item:hover { background: rgba(124,106,247,0.05); }
+  .item.done .item-text { text-decoration: line-through; color: var(--muted); }
+  .item.done .item-sub { color: var(--subtle); }
+  .checkbox { width: 18px; height: 18px; min-width: 18px; border-radius: 5px; border: 1.5px solid var(--subtle); display: flex; align-items: center; justify-content: center; margin-top: 1px; transition: all 0.15s; }
+  .checkbox.checked { background: var(--accent); border-color: var(--accent); }
+  .checkbox.checked::after { content: ''; display: block; width: 9px; height: 6px; border-left: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(-45deg) translate(0, -1px); }
+  .item-text { font-size: 13px; line-height: 1.5; color: var(--text); }
+  .item-sub { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+
+  /* WHO DONE IT */
+  .item-meta { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; min-width: 80px; }
+  .item-who { font-size: 10px; color: var(--muted); white-space: nowrap; }
+  .item-when { font-size: 10px; color: var(--subtle); }
+
+  /* USER SELECT */
+  .user-bar { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .user-bar label { font-size: 12px; color: var(--muted); }
+  .user-input { background: var(--bg3); border: 1px solid var(--border2); border-radius: 6px; color: var(--text); font-size: 13px; padding: 5px 10px; outline: none; width: 160px; }
+  .user-input:focus { border-color: var(--accent); }
+  .user-btn { background: var(--accent2); border: none; color: #fff; font-size: 12px; font-weight: 600; padding: 5px 14px; border-radius: 6px; cursor: pointer; transition: background 0.15s; }
+  .user-btn:hover { background: var(--accent); }
+  .current-user { font-size: 12px; color: var(--accent); font-weight: 500; }
+
+  /* REFRESH */
+  .refresh-btn { background: transparent; border: 1px solid var(--border2); color: var(--muted); font-size: 11px; padding: 4px 10px; border-radius: 6px; cursor: pointer; transition: all 0.15s; }
+  .refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* LOADING */
+  .loading { text-align: center; padding: 48px; color: var(--muted); font-size: 14px; }
+  .spinner { width: 32px; height: 32px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* TOAST */
+  .toast { position: fixed; bottom: 24px; right: 24px; background: var(--bg3); border: 1px solid var(--border2); color: var(--text); font-size: 13px; padding: 10px 16px; border-radius: 8px; z-index: 999; opacity: 0; transform: translateY(8px); transition: all 0.25s; pointer-events: none; }
+  .toast.show { opacity: 1; transform: translateY(0); }
+
+  @media (max-width: 600px) {
+    .header { padding: 12px 16px; }
+    .progress-wrap { padding: 10px 16px; flex-wrap: wrap; gap: 10px; }
+    .container { padding: 16px 12px; }
+    .progress-stats { gap: 12px; }
+    .item-meta { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="logo">Deck'n'<span>Bag</span></div>
+    <div class="subtitle">Kampfsystem Implementierung</div>
+  </div>
+  <div class="sync-indicator">
+    <div class="sync-dot" id="sync-dot"></div>
+    <span id="sync-text">Verbinde...</span>
+    <button class="refresh-btn" onclick="loadData()">↻ Sync</button>
+  </div>
+</div>
+
+<div class="progress-wrap">
+  <div class="progress-stats">
+    <div class="pstat"><div class="pstat-val" id="stat-done">0</div><div class="pstat-lbl">Fertig</div></div>
+    <div class="pstat"><div class="pstat-val" id="stat-open">0</div><div class="pstat-lbl">Offen</div></div>
+    <div class="pstat"><div class="pstat-val" id="stat-pct">0%</div><div class="pstat-lbl">Gesamt</div></div>
+  </div>
+  <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+</div>
+
+<div class="container">
+  <div class="user-bar" id="user-bar">
+    <label>Dein Name:</label>
+    <input class="user-input" id="user-input" placeholder="z.B. Dennis" maxlength="20" />
+    <button class="user-btn" onclick="setUser()">Speichern</button>
+    <span class="current-user" id="current-user-label"></span>
+  </div>
+  <div id="phases-container"><div class="loading"><div class="spinner"></div>Lade Daten...</div></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const STORAGE_KEY = 'decknbag_combat_todo_v1';
+const OPEN_KEY = 'decknbag_open_phases_v1';
+const USER_KEY = 'decknbag_username_v1';
+
+// ─── DATA ─────────────────────────────────────────────────────────────────────
+const PHASES = [
+  {
+    id: 'stats', title: 'Stats & Berechnungen', color: '#3B8BD4',
+    items: [
+      { id: 's1', text: 'Basis-Stats definieren', sub: 'STR, INT, DEX, DEF, VIT, SPD, CRIT, PSMC, BDMC als Attribute auf Einheit' },
+      { id: 's2', text: 'OFFENSIVE berechnen', sub: 'PrimaryValue + (0.5 * SecondaryValue) * OffensiveMultiplier' },
+      { id: 's3', text: 'DEFENSIVE berechnen', sub: '(INT + (0.5 * TertiaryValue)) * DefensiveMultiplier' },
+      { id: 's4', text: 'LIFE berechnen (Gegner)', sub: 'RTT * LifeMultiplier * 1.5' },
+      { id: 's5', text: 'LIFE berechnen (Spieler)', sub: 'RTT * 1.5' },
+      { id: 's6', text: 'SPEED berechnen', sub: 'Speed * SpeedMultiplier für Gegner, Speed direkt für Spieler' },
+      { id: 's7', text: 'CRIT-Wert ableiten', sub: 'CRIT-Stat → Multiplikator umrechnen' },
+      { id: 's8', text: 'Multiplikatoren konfigurierbar machen', sub: 'OffensiveMultiplier, DefensiveMultiplier, LifeMultiplier, RewardMultiplier' },
+    ]
+  },
+  {
+    id: 'cards', title: 'Karten-System', color: '#639922',
+    items: [
+      { id: 'c1', text: 'ActionResource-Datenstruktur anlegen', sub: 'UniqueID, Name, Description, Texture, EffectType, Priority, Execution' },
+      { id: 'c2', text: 'CardResource-Datenstruktur anlegen', sub: 'SoftValue, ExempValue, InstantValue, SpecialValue, UnitType, CardType, Rarity, MaxAmount, Cost, EnergyCost' },
+      { id: 'c3', text: 'SupportingCardTypes definieren', sub: 'Welche Card Types unterstützen welche Combos?' },
+      { id: 'c4', text: 'HandkartenMultiplier implementieren', sub: 'Wird bei COMBO CALCULATION auf Schaden angewendet' },
+      { id: 'c5', text: 'SecondEffect-Logik implementieren', sub: 'Ab 40%: PSM→SPEED, ATM→OFFENSIVE' },
+      { id: 'c6', text: 'Karten-Pool-System (CHOOSE ORDER)', sub: 'Spieler zieht Karten aus Pool zu Kampfbeginn' },
+    ]
+  },
+  {
+    id: 'flow', title: 'Kampf-Ablauf & Reihenfolge', color: '#BA7517',
+    items: [
+      { id: 'f1', text: 'SPEED-Vergleich: Player First vs Enemy First', sub: 'HIGHER SPEED bestimmt welcher Branch zuerst läuft' },
+      { id: 'f2', text: 'WAITING_ENEMY_CHOOSE_MOVES implementieren', sub: 'Jeder Gegner wählt einen Move aus dem Pool' },
+      { id: 'f3', text: 'PLAYER_CHOOSE_MOVES implementieren', sub: 'Spieler wählt Karten (UI) — ValueChanges & InstantValueChanges trennen' },
+      { id: 'f4', text: 'CALCULATION-Phase implementieren', sub: 'HandkartenMultiplier ermitteln, VALUE CALCULATION durchführen' },
+      { id: 'f5', text: 'SPEEDCHECK-Phase implementieren', sub: 'Spieler-SPEED via SPEED * AttDefGff neu schreiben' },
+      { id: 'f6', text: 'PASSIVE_EFFECTS-Phase implementieren', sub: 'Passive Effekte aller Einheiten anwenden' },
+      { id: 'f7', text: 'ROUND_SEQUENCE-Schleife implementieren', sub: 'Loop bis BATTLE END → zurück zu WAITING_ENEMY_CHOOSE_MOVES' },
+    ]
+  },
+  {
+    id: 'round', title: 'Runden-Sequenz intern', color: '#993556',
+    items: [
+      { id: 'r1', text: 'GUARD_PHASE implementieren', sub: 'Enemy Guard aktiv → keine OFFENSIVE — LOWER SPEED geht zuerst in Guard' },
+      { id: 'r2', text: 'DAMAGE_PHASE: Number of Attack * OFFENSIVE', sub: 'IF CRIT: Multiplikator anwenden' },
+      { id: 'r3', text: 'DAMAGE_PHASE: Nettodamage berechnen', sub: 'DAMAGE = OFFENSIVE - ENEMY_DEFENSIVE; ≤0 → kein Schaden' },
+      { id: 'r4', text: 'PASSIVE_PHASE (Self)', sub: 'SET BUFF/CHANGES am Ende des eigenen Zuges' },
+      { id: 'r5', text: 'Runden-Abschluss-Logik', sub: '"Runde abgeschlossen" → nächste Runde oder BATTLE END prüfen' },
+      { id: 'r6', text: 'HIGHER vs LOWER SPEED Reihenfolge in DAMAGE_PHASE', sub: 'HIGHER SPEED agiert zuerst' },
+    ]
+  },
+  {
+    id: 'combo', title: 'Combo-System', color: '#7c6af7',
+    items: [
+      { id: 'k1', text: 'Poker-Hand-Erkennung implementieren', sub: 'DreiRange, VierRange, Full House, 2 Paare, FünfRange aus Haupt-Stat-Matching' },
+      { id: 'k2', text: 'Combo-Multiplikatoren definieren', sub: 'DreiRange ×1.5 | VierRange ×2 | Full House OFF*1.25 & BDMC*1.5 | 2 Paare ×1.25 | FünfRange ×2.25' },
+      { id: 'k3', text: 'OFFENSIVE_KOMBO berechnen', sub: 'Basis +3 auf OFFENSIVE, dann Multiplikator' },
+      { id: 'k4', text: 'DRILLING_KOMBO berechnen', sub: 'Basis +1.5, dann Multiplikator' },
+      { id: 'k5', text: 'Haupt-Stat Matching-Logik', sub: 'Gleiche Haupt-Stats auf mehreren Karten → Combo-Erkennung' },
+      { id: 'k6', text: 'Combo-Berechnungen testen', sub: 'Full House: Value(3)*1.25 & BDMC(1)*1.5 | FünfRange: Value*2.25 OFF*1.5' },
+    ]
+  },
+  {
+    id: 'value', title: 'Value-Change-System', color: '#0F6E56',
+    items: [
+      { id: 'v1', text: 'InstantValueChanges definieren', sub: 'Heal, ComboPoints+1, Energy+2, Handkarten+1 — sofortige Auslösung' },
+      { id: 'v2', text: 'ValueChanges definieren', sub: 'BattleValueChanges, PoisonValueChanges, DefeatValueChanges, SpecialValueChanges' },
+      { id: 'v3', text: 'BattleValueChanges: Offensive/Defensive-Modifier', sub: 'laufstKampfMultiplier 1.25, PoisonMultiplier, Buff-System' },
+      { id: 'v4', text: 'EinbuffValueChanges implementieren', sub: 'PSM + n vom PSM%, ATM = Schaden DEFENSIVE-ENEMY OFFENSIVE' },
+      { id: 'v5', text: 'SpeedValueChanges: CurrentSpeedChange', sub: 'Default = 1.0 — temporär änderbar durch Karten/Effekte' },
+      { id: 'v6', text: 'INSTANT_VALUE_CHANGES auf Spieler anwenden', sub: 'NumberOfAttack+1, Heal(Lib+5%), ComboPoints+1, Energy+2, Handkarten+1' },
+    ]
+  },
+  {
+    id: 'end', title: 'Battle End & Belohnung', color: '#888780',
+    items: [
+      { id: 'e1', text: 'BATTLE END-Bedingung prüfen', sub: 'Spieler-Life ≤ 0 → "Spieler verliert" | Gegner-Life ≤ 0 → "Spieler gewinnt"' },
+      { id: 'e2', text: 'Game Over implementieren', sub: 'Spieler verliert → Game Over Zustand/Screen' },
+      { id: 'e3', text: 'REWARD_CALCULATION implementieren', sub: 'RewardMultiplier anwenden' },
+      { id: 'e4', text: 'REWARD-Auswahl implementieren', sub: 'Spieler bekommt Belohnungsoptionen nach dem Sieg' },
+      { id: 'e5', text: 'PATH_SELECTION implementieren', sub: 'Nach Reward → nächsten Kampf/Weg wählen (Roguelike-Pfad)' },
+      { id: 'e6', text: 'Kartenziehen-Logik (Kampfstart)', sub: 'Karten ziehen → CHOOSE ORDER → in Kampfschleife' },
+    ]
+  },
+];
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let todoState = {};   // { itemId: { done: bool, user: string, time: string } }
+let openPhases = {};
+let currentUser = localStorage.getItem(USER_KEY) || '';
+let syncing = false;
+
+// ─── STORAGE API ──────────────────────────────────────────────────────────────
+async function loadData() {
+  setSyncState('syncing');
+  try {
+    const result = await window.storage.get(STORAGE_KEY, true);
+    if (result && result.value) {
+      todoState = JSON.parse(result.value);
+    }
+    setSyncState('synced');
+    render();
+  } catch(e) {
+    // Key doesn't exist yet — start fresh
+    todoState = {};
+    setSyncState('synced');
+    render();
+  }
+}
+
+async function saveData() {
+  setSyncState('syncing');
+  try {
+    await window.storage.set(STORAGE_KEY, JSON.stringify(todoState), true);
+    setSyncState('synced');
+  } catch(e) {
+    setSyncState('error');
+    showToast('Sync fehlgeschlagen — versuche es erneut');
+  }
+}
+
+// ─── SYNC STATE ───────────────────────────────────────────────────────────────
+function setSyncState(state) {
+  const dot = document.getElementById('sync-dot');
+  const txt = document.getElementById('sync-text');
+  dot.className = 'sync-dot';
+  if (state === 'synced') { dot.classList.add('synced'); txt.textContent = 'Synchronisiert'; }
+  else if (state === 'syncing') { dot.classList.add('syncing'); txt.textContent = 'Synchronisiere...'; }
+  else { txt.textContent = 'Sync-Fehler'; }
+}
+
+// ─── USER ─────────────────────────────────────────────────────────────────────
+function setUser() {
+  const val = document.getElementById('user-input').value.trim();
+  if (!val) return;
+  currentUser = val;
+  localStorage.setItem(USER_KEY, val);
+  document.getElementById('current-user-label').textContent = '✓ Aktiv als: ' + val;
+  document.getElementById('user-input').value = '';
+  showToast('Willkommen, ' + val + '!');
+}
+
+function initUser() {
+  if (currentUser) {
+    document.getElementById('current-user-label').textContent = '✓ Aktiv als: ' + currentUser;
+  }
+}
+
+// ─── TOGGLE ───────────────────────────────────────────────────────────────────
+async function toggleItem(itemId) {
+  if (!currentUser) {
+    showToast('Bitte zuerst deinen Namen eingeben!');
+    document.getElementById('user-input').focus();
+    return;
+  }
+  const now = todoState[itemId];
+  if (now && now.done) {
+    todoState[itemId] = { done: false, user: '', time: '' };
+  } else {
+    const d = new Date();
+    todoState[itemId] = {
+      done: true,
+      user: currentUser,
+      time: d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit' }) + ' ' + d.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' })
+    };
+  }
+  render();
+  await saveData();
+}
+
+// ─── RENDER ───────────────────────────────────────────────────────────────────
+function render() {
+  renderProgress();
+  renderPhases();
+}
+
+function renderProgress() {
+  let total = 0, done = 0;
+  PHASES.forEach(p => p.items.forEach(it => {
+    total++;
+    if (todoState[it.id] && todoState[it.id].done) done++;
+  }));
+  const pct = total ? Math.round(done / total * 100) : 0;
+  document.getElementById('stat-done').textContent = done;
+  document.getElementById('stat-open').textContent = total - done;
+  document.getElementById('stat-pct').textContent = pct + '%';
+  document.getElementById('progress-fill').style.width = pct + '%';
+}
+
+function renderPhases() {
+  const container = document.getElementById('phases-container');
+  container.innerHTML = '';
+  PHASES.forEach(phase => {
+    let phaseDone = 0;
+    phase.items.forEach(it => { if (todoState[it.id] && todoState[it.id].done) phaseDone++; });
+    const total = phase.items.length;
+    const pct = Math.round(phaseDone / total * 100);
+    const isOpen = openPhases[phase.id] !== false;
+
+    const div = document.createElement('div');
+    div.className = 'phase';
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'phase-header';
+    header.innerHTML = `
+      <div class="phase-dot" style="background:${phase.color}"></div>
+      <div class="phase-title">${phase.title}</div>
+      <span class="phase-badge" style="background:${phase.color}22;color:${phase.color}">${phaseDone}/${total}</span>
+      <span class="phase-pct">${pct}%</span>
+      <span class="phase-chevron ${isOpen ? 'open' : ''}">▶</span>
+    `;
+    header.onclick = () => {
+      openPhases[phase.id] = !isOpen;
+      renderPhases();
+    };
+
+    // Phase bar
+    const bar = document.createElement('div');
+    bar.className = 'phase-bar';
+    bar.style.background = 'var(--bg3)';
+    bar.innerHTML = `<div class="phase-bar-fill" style="width:${pct}%;background:${phase.color};opacity:0.7"></div>`;
+
+    // Items
+    const itemsDiv = document.createElement('div');
+    itemsDiv.className = 'items' + (isOpen ? ' open' : '');
+
+    phase.items.forEach(item => {
+      const st = todoState[item.id];
+      const isDone = st && st.done;
+      const row = document.createElement('div');
+      row.className = 'item' + (isDone ? ' done' : '');
+      row.innerHTML = `
+        <div class="checkbox ${isDone ? 'checked' : ''}"></div>
+        <div style="flex:1">
+          <div class="item-text">${item.text}</div>
+          <div class="item-sub">${item.sub}</div>
+        </div>
+        <div class="item-meta">
+          ${isDone && st.user ? `<div class="item-who">✓ ${st.user}</div>` : ''}
+          ${isDone && st.time ? `<div class="item-when">${st.time}</div>` : ''}
+        </div>
+      `;
+      row.onclick = () => toggleItem(item.id);
+      itemsDiv.appendChild(row);
+    });
+
+    div.appendChild(header);
+    div.appendChild(bar);
+    div.appendChild(itemsDiv);
+    container.appendChild(div);
+  });
+}
+
+// ─── TOAST ────────────────────────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ─── AUTO-REFRESH (jede 30 Sek) ──────────────────────────────────────────────
+setInterval(loadData, 30000);
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+// Default: alle Phasen zu, erste auf
+PHASES.forEach(p => { openPhases[p.id] = false; });
+openPhases[PHASES[0].id] = true;
+
+initUser();
+loadData();
+</script>
+</body>
+</html>
