@@ -45,8 +45,8 @@
     "time": "21.03. 15:18"
   },
   "c1": {
-    "done": false,
-    "user": "",
-    "time": ""
+    "done": true,
+    "user": "Marc",
+    "time": "21.03. 15:18"
   }
 }
